@@ -5,3 +5,4 @@ dist
 .env.*
 database.sqlite*
 .DS_Store
+add 

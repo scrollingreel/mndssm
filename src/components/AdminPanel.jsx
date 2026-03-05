@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { X, Plus, Trash2, Lock, Eye, EyeOff, Save, LogOut, Package, ShoppingBag, RefreshCw, Loader2 } from 'lucide-react'
-import { getProducts, addProduct, deleteProduct, updateProduct } from '../firebase'
+import { X, Plus, Trash2, Lock, Eye, EyeOff, Save, LogOut, Package, ShoppingBag, RefreshCw, Loader2, UploadCloud } from 'lucide-react'
+import { getProducts, addProduct, deleteProduct, updateProduct, storage } from '../firebase'
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 
 const AdminPanel = ({ isOpen, onClose, onProductsUpdate }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -12,6 +13,8 @@ const AdminPanel = ({ isOpen, onClose, onProductsUpdate }) => {
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [isUploading, setIsUploading] = useState(false)
 
   const [newProduct, setNewProduct] = useState({
     name: '',
@@ -25,6 +28,41 @@ const AdminPanel = ({ isOpen, onClose, onProductsUpdate }) => {
 
   const categories = ['Sarees', 'Suits', 'Readymade', 'Summer Wear', 'Stocklot']
   const badges = ['', 'New Arrival', 'Bestseller', 'Premium', 'Hot Deal', 'Limited Stock']
+
+  const handleImageUpload = (e, target) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    setIsUploading(true)
+    const storageRef = ref(storage, `products/${Date.now()}_${file.name}`)
+    const uploadTask = uploadBytesResumable(storageRef, file)
+
+    uploadTask.on(
+      'state_changed',
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100
+        setUploadProgress(progress)
+      },
+      (error) => {
+        console.error('Upload failed:', error)
+        setError('Image upload failed')
+        setIsUploading(false)
+        setUploadProgress(0)
+      },
+      async () => {
+        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref)
+        if (target === 'add') {
+          setNewProduct(prev => ({ ...prev, image: downloadURL }))
+        } else {
+          setEditingProduct(prev => ({ ...prev, image: downloadURL }))
+        }
+        setIsUploading(false)
+        setUploadProgress(0)
+        setSuccess('Image uploaded successfully!')
+        setTimeout(() => setSuccess(''), 3000)
+      }
+    )
+  }
 
   const loadProducts = async () => {
     setLoading(true)
@@ -316,27 +354,57 @@ const AdminPanel = ({ isOpen, onClose, onProductsUpdate }) => {
                         placeholder="2999 (for showing discount)"
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Image URL *</label>
-                      <input
-                        type="url"
-                        required
-                        value={newProduct.image}
-                        onChange={(e) => setNewProduct({ ...newProduct, image: e.target.value })}
-                        className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500"
-                        placeholder="https://example.com/image.jpg"
-                      />
-                      {/* Image Preview */}
-                      {newProduct.image && (
-                        <div className="mt-2">
-                          <img
-                            src={newProduct.image}
-                            alt="Preview"
-                            className="w-20 h-20 object-cover rounded-lg border"
-                            onError={(e) => e.target.style.display = 'none'}
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Product Image *</label>
+                      <div className="flex gap-4 items-start">
+                        <div className="flex-1 space-y-3">
+                          <input
+                            type="url"
+                            required
+                            value={newProduct.image}
+                            onChange={(e) => setNewProduct({ ...newProduct, image: e.target.value })}
+                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500"
+                            placeholder="https://example.com/image.jpg"
                           />
+                          <div className="relative">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleImageUpload(e, 'add')}
+                              disabled={isUploading}
+                              className="hidden"
+                              id="image-upload-add"
+                            />
+                            <label
+                              htmlFor="image-upload-add"
+                              className={`flex items-center justify-center gap-2 w-full px-4 py-3 bg-gray-50 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${isUploading ? 'border-green-300 text-green-600' : 'border-gray-300 hover:bg-gray-100 text-gray-600'
+                                }`}
+                            >
+                              {isUploading ? (
+                                <>
+                                  <Loader2 className="w-5 h-5 animate-spin" />
+                                  <span className="font-medium">Uploading... {Math.round(uploadProgress)}%</span>
+                                </>
+                              ) : (
+                                <>
+                                  <UploadCloud className="w-5 h-5 text-gray-500" />
+                                  <span className="font-medium">Or upload image from device</span>
+                                </>
+                              )}
+                            </label>
+                          </div>
                         </div>
-                      )}
+                        {newProduct.image && (
+                          <div className="w-28 h-28 shrink-0 rounded-xl overflow-hidden border-2 border-gray-100 bg-gray-50 p-1">
+                            <img
+                              src={newProduct.image}
+                              alt="Preview"
+                              className="w-full h-full object-cover rounded-lg"
+                              onError={(e) => e.target.style.display = 'none'}
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Badge</label>
@@ -426,15 +494,57 @@ const AdminPanel = ({ isOpen, onClose, onProductsUpdate }) => {
                         className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl"
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
-                      <input
-                        type="url"
-                        required
-                        value={editingProduct.image || ''}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, image: e.target.value })}
-                        className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl"
-                      />
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Product Image</label>
+                      <div className="flex gap-4 items-start">
+                        <div className="flex-1 space-y-3">
+                          <input
+                            type="url"
+                            required
+                            value={editingProduct.image || ''}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, image: e.target.value })}
+                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl"
+                            placeholder="https://example.com/image.jpg"
+                          />
+                          <div className="relative">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleImageUpload(e, 'edit')}
+                              disabled={isUploading}
+                              className="hidden"
+                              id="image-upload-edit"
+                            />
+                            <label
+                              htmlFor="image-upload-edit"
+                              className={`flex items-center justify-center gap-2 w-full px-4 py-3 bg-gray-50 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${isUploading ? 'border-blue-300 text-blue-600' : 'border-gray-300 hover:bg-gray-100 text-gray-600'
+                                }`}
+                            >
+                              {isUploading ? (
+                                <>
+                                  <Loader2 className="w-5 h-5 animate-spin" />
+                                  <span className="font-medium">Uploading... {Math.round(uploadProgress)}%</span>
+                                </>
+                              ) : (
+                                <>
+                                  <UploadCloud className="w-5 h-5 text-gray-500" />
+                                  <span className="font-medium">Or upload new image from device</span>
+                                </>
+                              )}
+                            </label>
+                          </div>
+                        </div>
+                        {editingProduct.image && (
+                          <div className="w-28 h-28 shrink-0 rounded-xl overflow-hidden border-2 border-gray-100 bg-gray-50 p-1">
+                            <img
+                              src={editingProduct.image}
+                              alt="Preview"
+                              className="w-full h-full object-cover rounded-lg"
+                              onError={(e) => e.target.style.display = 'none'}
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Badge</label>

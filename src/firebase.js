@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app"
 import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc, updateDoc } from "firebase/firestore"
+import { getStorage } from "firebase/storage"
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -14,6 +15,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig)
 const db = getFirestore(app)
+const storage = getStorage(app)
 
 // Products collection reference
 const productsCollection = collection(db, "products")
@@ -77,4 +79,4 @@ export const updateProduct = async (productId, updatedData) => {
   }
 }
 
-export { db }
+export { db, storage }
